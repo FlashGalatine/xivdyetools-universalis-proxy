@@ -1,0 +1,36 @@
+{
+  "name": "xivdyetools-universalis-proxy",
+  "version": "1.0.0",
+  "description": "Cloudflare Worker proxy for Universalis API with CORS support",
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "wrangler dev",
+    "dev:local": "wrangler dev --local",
+    "deploy": "wrangler deploy",
+    "deploy:production": "wrangler deploy --env production",
+    "type-check": "tsc --noEmit",
+    "lint": "eslint src/",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "keywords": [
+    "xivdyetools",
+    "universalis",
+    "cors",
+    "proxy",
+    "cloudflare-workers"
+  ],
+  "author": "FlashGalatine",
+  "license": "MIT",
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241205.0",
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2",
+    "vitest": "^4.0.16",
+    "wrangler": "^4.55.0"
+  },
+  "dependencies": {
+    "hono": "^4.6.14"
+  }
+}

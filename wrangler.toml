@@ -1,0 +1,36 @@
+name = "xivdyetools-universalis-proxy"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Development environment (default)
+[vars]
+ENVIRONMENT = "development"
+# Allowed origins for CORS (comma-separated)
+ALLOWED_ORIGINS = "http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173"
+# Universalis API base URL
+UNIVERSALIS_API_BASE = "https://universalis.app/api/v2"
+# Rate limit: requests per minute per IP
+RATE_LIMIT_REQUESTS = "60"
+RATE_LIMIT_WINDOW_SECONDS = "60"
+
+# Production environment
+[env.production]
+name = "xivdyetools-universalis-proxy"
+
+[env.production.vars]
+ENVIRONMENT = "production"
+ALLOWED_ORIGINS = "https://xivdyetools.projectgalatine.com"
+UNIVERSALIS_API_BASE = "https://universalis.app/api/v2"
+RATE_LIMIT_REQUESTS = "30"
+RATE_LIMIT_WINDOW_SECONDS = "60"
+
+# Optional: KV namespace for caching (uncomment to enable)
+# [[kv_namespaces]]
+# binding = "PRICE_CACHE"
+# id = "your-kv-namespace-id"
+
+# [env.production.kv_namespaces]
+# [[env.production.kv_namespaces]]
+# binding = "PRICE_CACHE"
+# id = "your-production-kv-namespace-id"
