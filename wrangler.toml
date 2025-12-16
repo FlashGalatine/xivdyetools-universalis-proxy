@@ -25,12 +25,22 @@ UNIVERSALIS_API_BASE = "https://universalis.app/api/v2"
 RATE_LIMIT_REQUESTS = "30"
 RATE_LIMIT_WINDOW_SECONDS = "60"
 
-# Optional: KV namespace for caching (uncomment to enable)
-# [[kv_namespaces]]
-# binding = "PRICE_CACHE"
-# id = "your-kv-namespace-id"
+# KV namespaces for caching
+[[kv_namespaces]]
+binding = "PRICE_CACHE"
+id = "a00a0c68160b4369bf6c079c99e329a8"
+preview_id = "f6bf0ec4700342698e122035b3ddc49c"
 
-# [env.production.kv_namespaces]
-# [[env.production.kv_namespaces]]
-# binding = "PRICE_CACHE"
-# id = "your-production-kv-namespace-id"
+[[kv_namespaces]]
+binding = "STATIC_CACHE"
+id = "50cc58ccd8574294a18ede9b6880e0aa"
+preview_id = "e0ffc718f9f64112972a3ed705df0c9e"
+
+# Production KV namespaces
+[[env.production.kv_namespaces]]
+binding = "PRICE_CACHE"
+id = "a00a0c68160b4369bf6c079c99e329a8"
+
+[[env.production.kv_namespaces]]
+binding = "STATIC_CACHE"
+id = "50cc58ccd8574294a18ede9b6880e0aa"

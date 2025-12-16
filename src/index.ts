@@ -3,33 +3,18 @@
  *
  * Cloudflare Worker that proxies requests to Universalis API with:
  * - Proper CORS headers on ALL responses (including errors)
- * - Rate limiting to avoid 429 errors from upstream
- * - Request deduplication
- * - Edge caching for repeated requests
+ * - Dual-layer caching (Cache API + KV) for optimal performance
+ * - Request coalescing to prevent duplicate upstream requests
+ * - Stale-while-revalidate for fast responses during cache refresh
  *
  * @module xivdyetools-universalis-proxy
  */
 
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-
-/**
- * Environment bindings
- */
-interface Env {
-  ENVIRONMENT: string;
-  ALLOWED_ORIGINS: string;
-  UNIVERSALIS_API_BASE: string;
-  RATE_LIMIT_REQUESTS: string;
-  RATE_LIMIT_WINDOW_SECONDS: string;
-  // Optional KV for caching
-  PRICE_CACHE?: KVNamespace;
-}
-
-/**
- * Cache TTL for price data (5 minutes)
- */
-const CACHE_TTL_SECONDS = 300;
+import type { Env } from './types/cache';
+import { CACHE_CONFIGS } from './config/cache';
+import { cachedFetch, buildCacheHeaders, UpstreamError } from './services/cached-fetch';
 
 /**
  * Retry-After header value when rate limited (seconds)
@@ -72,7 +57,7 @@ app.get('/', (c) => {
     name: 'xivdyetools-universalis-proxy',
     status: 'ok',
     environment: c.env.ENVIRONMENT,
-    version: '1.0.0',
+    version: '1.1.0',
   });
 });
 
@@ -85,8 +70,27 @@ app.get('/health', (c) => {
 // =============================================================================
 
 /**
+ * Normalize item IDs for consistent cache keys
+ * Sorts IDs numerically to ensure same items in different order hit same cache
+ */
+function normalizeItemIds(itemIds: string): string {
+  return itemIds
+    .split(',')
+    .map(Number)
+    .filter((n) => !isNaN(n) && n > 0)
+    .sort((a, b) => a - b)
+    .join(',');
+}
+
+/**
  * Proxy aggregated price data endpoint
  * GET /api/v2/aggregated/:datacenter/:itemIds
+ *
+ * Features:
+ * - Dual-layer caching (Cache API + KV)
+ * - Request coalescing for duplicate requests
+ * - Stale-while-revalidate for fast responses
+ * - Normalized cache keys for better hit rates
  */
 app.get('/api/v2/aggregated/:datacenter/:itemIds', async (c) => {
   const { datacenter, itemIds } = c.req.param();
@@ -101,81 +105,51 @@ app.get('/api/v2/aggregated/:datacenter/:itemIds', async (c) => {
     return c.json({ error: 'Invalid itemIds parameter' }, 400);
   }
 
-  // Build cache key
-  const cacheKey = `aggregated:${datacenter}:${itemIds}`;
-
-  // Check KV cache if available
-  if (c.env.PRICE_CACHE) {
-    try {
-      const cached = await c.env.PRICE_CACHE.get(cacheKey, 'json');
-      if (cached) {
-        return c.json(cached, 200, {
-          'X-Cache': 'HIT',
-          'X-Cache-TTL': String(CACHE_TTL_SECONDS),
-        });
-      }
-    } catch {
-      // Cache miss or error, continue to fetch
-    }
-  }
-
-  // Forward request to Universalis
-  const universalisUrl = `${c.env.UNIVERSALIS_API_BASE}/aggregated/${datacenter}/${itemIds}`;
+  // Normalize cache key for better cache hit rates
+  // - Lowercase datacenter for consistency
+  // - Sort item IDs so [1,2,3] and [3,1,2] hit same cache
+  const normalizedIds = normalizeItemIds(itemIds);
+  const cacheKey = `aggregated:${datacenter.toLowerCase()}:${normalizedIds}`;
+  const config = CACHE_CONFIGS.aggregated;
 
   try {
-    const response = await fetch(universalisUrl, {
-      method: 'GET',
-      headers: {
-        Accept: 'application/json',
-        'User-Agent': 'XIVDyeTools/1.0 (https://xivdyetools.projectgalatine.com)',
-      },
+    const result = await cachedFetch({
+      cacheKey,
+      config,
+      upstreamUrl: `${c.env.UNIVERSALIS_API_BASE}/aggregated/${datacenter}/${itemIds}`,
+      ctx: c.executionCtx,
+      kv: c.env.PRICE_CACHE,
+      baseUrl: new URL(c.req.url).origin,
     });
 
-    // Handle rate limiting from upstream
-    if (response.status === 429) {
-      const retryAfter = response.headers.get('Retry-After') || String(RATE_LIMIT_RETRY_AFTER);
-      return c.json(
-        {
-          error: 'Rate limited by upstream API',
-          retryAfter: parseInt(retryAfter, 10),
-          message: 'Please try again later',
-        },
-        429,
-        {
-          'Retry-After': retryAfter,
-        }
-      );
-    }
-
-    // Handle other errors
-    if (!response.ok) {
-      return c.json(
-        {
-          error: `Upstream API error: ${response.status}`,
-          message: response.statusText,
-        },
-        response.status as 400 | 404 | 500 | 502 | 503
-      );
-    }
-
-    // Parse response
-    const data = await response.json();
-
-    // Cache in KV if available
-    if (c.env.PRICE_CACHE) {
-      try {
-        await c.env.PRICE_CACHE.put(cacheKey, JSON.stringify(data), {
-          expirationTtl: CACHE_TTL_SECONDS,
-        });
-      } catch {
-        // Caching failed, continue without it
-      }
-    }
-
-    return c.json(data, 200, {
-      'X-Cache': 'MISS',
-    });
+    return c.json(result.data, 200, buildCacheHeaders(result.source, result.isStale, config));
   } catch (error) {
+    // Handle upstream errors specifically
+    if (error instanceof UpstreamError) {
+      // Handle rate limiting from upstream
+      if (error.status === 429) {
+        return c.json(
+          {
+            error: 'Rate limited by upstream API',
+            retryAfter: RATE_LIMIT_RETRY_AFTER,
+            message: 'Please try again later',
+          },
+          429,
+          {
+            'Retry-After': String(RATE_LIMIT_RETRY_AFTER),
+          }
+        );
+      }
+
+      return c.json(
+        {
+          error: `Upstream API error: ${error.status}`,
+          message: error.statusText,
+        },
+        error.status as 400 | 404 | 500 | 502 | 503
+      );
+    }
+
     console.error('Error proxying to Universalis:', error);
     return c.json(
       {
@@ -190,29 +164,34 @@ app.get('/api/v2/aggregated/:datacenter/:itemIds', async (c) => {
 /**
  * Proxy data centers list
  * GET /api/v2/data-centers
+ *
+ * Features:
+ * - 24-hour cache TTL (data rarely changes)
+ * - 6-hour stale-while-revalidate window
  */
 app.get('/api/v2/data-centers', async (c) => {
-  const universalisUrl = `${c.env.UNIVERSALIS_API_BASE}/data-centers`;
+  const cacheKey = 'data-centers:all';
+  const config = CACHE_CONFIGS.dataCenters;
 
   try {
-    const response = await fetch(universalisUrl, {
-      method: 'GET',
-      headers: {
-        Accept: 'application/json',
-        'User-Agent': 'XIVDyeTools/1.0 (https://xivdyetools.projectgalatine.com)',
-      },
+    const result = await cachedFetch({
+      cacheKey,
+      config,
+      upstreamUrl: `${c.env.UNIVERSALIS_API_BASE}/data-centers`,
+      ctx: c.executionCtx,
+      kv: c.env.STATIC_CACHE,
+      baseUrl: new URL(c.req.url).origin,
     });
 
-    if (!response.ok) {
+    return c.json(result.data, 200, buildCacheHeaders(result.source, result.isStale, config));
+  } catch (error) {
+    if (error instanceof UpstreamError) {
       return c.json(
-        { error: `Upstream API error: ${response.status}` },
-        response.status as 400 | 404 | 500 | 502 | 503
+        { error: `Upstream API error: ${error.status}` },
+        error.status as 400 | 404 | 500 | 502 | 503
       );
     }
 
-    const data = await response.json();
-    return c.json(data);
-  } catch (error) {
     console.error('Error fetching data centers:', error);
     return c.json({ error: 'Failed to fetch data centers' }, 502);
   }
@@ -221,29 +200,34 @@ app.get('/api/v2/data-centers', async (c) => {
 /**
  * Proxy worlds list
  * GET /api/v2/worlds
+ *
+ * Features:
+ * - 24-hour cache TTL (data rarely changes)
+ * - 6-hour stale-while-revalidate window
  */
 app.get('/api/v2/worlds', async (c) => {
-  const universalisUrl = `${c.env.UNIVERSALIS_API_BASE}/worlds`;
+  const cacheKey = 'worlds:all';
+  const config = CACHE_CONFIGS.worlds;
 
   try {
-    const response = await fetch(universalisUrl, {
-      method: 'GET',
-      headers: {
-        Accept: 'application/json',
-        'User-Agent': 'XIVDyeTools/1.0 (https://xivdyetools.projectgalatine.com)',
-      },
+    const result = await cachedFetch({
+      cacheKey,
+      config,
+      upstreamUrl: `${c.env.UNIVERSALIS_API_BASE}/worlds`,
+      ctx: c.executionCtx,
+      kv: c.env.STATIC_CACHE,
+      baseUrl: new URL(c.req.url).origin,
     });
 
-    if (!response.ok) {
+    return c.json(result.data, 200, buildCacheHeaders(result.source, result.isStale, config));
+  } catch (error) {
+    if (error instanceof UpstreamError) {
       return c.json(
-        { error: `Upstream API error: ${response.status}` },
-        response.status as 400 | 404 | 500 | 502 | 503
+        { error: `Upstream API error: ${error.status}` },
+        error.status as 400 | 404 | 500 | 502 | 503
       );
     }
 
-    const data = await response.json();
-    return c.json(data);
-  } catch (error) {
     console.error('Error fetching worlds:', error);
     return c.json({ error: 'Failed to fetch worlds' }, 502);
   }
