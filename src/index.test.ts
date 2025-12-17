@@ -5,10 +5,28 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import app from './index';
 import { createMockKV, createMockExecutionContext, createMockEnv, resetAllMocks } from './test-setup';
+import { UpstreamError } from './services/cached-fetch';
 
 // Mock global fetch for upstream API calls
 const mockFetch = vi.fn();
 vi.stubGlobal('fetch', mockFetch);
+
+// Mock cachedFetch for controlled error testing
+const mockCachedFetch = vi.fn();
+vi.mock('./services/cached-fetch', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./services/cached-fetch')>();
+  return {
+    ...actual,
+    cachedFetch: (...args: unknown[]) => {
+      // If mockCachedFetch has a mock implementation, use it
+      if (mockCachedFetch.getMockImplementation()) {
+        return mockCachedFetch(...args);
+      }
+      // Otherwise, use the real implementation
+      return actual.cachedFetch(...(args as Parameters<typeof actual.cachedFetch>));
+    },
+  };
+});
 
 describe('Universalis Proxy App', () => {
   let mockEnv: ReturnType<typeof createMockEnv>;
@@ -275,9 +293,6 @@ describe('Universalis Proxy App', () => {
   });
 
   describe('GET /api/v2/data-centers', () => {
-    // Note: Error tests are covered in cached-fetch.test.ts
-    // These integration tests focus on the happy path due to cache key collision
-
     beforeEach(() => {
       resetAllMocks();
       mockFetch.mockReset();
@@ -314,12 +329,43 @@ describe('Universalis Proxy App', () => {
       expect(response.headers.get('X-Cache-Source')).toBeTruthy();
       expect(response.headers.get('Cache-Control')).toContain('max-age=');
     });
+
+    it('should handle upstream errors from data-centers endpoint', async () => {
+      // Mock cachedFetch to throw an UpstreamError
+      mockCachedFetch.mockImplementationOnce(() => {
+        throw new UpstreamError(503, 'Service Unavailable');
+      });
+
+      const request = createRequest('/api/v2/data-centers');
+      const response = await app.fetch(request, mockEnv, mockCtx);
+
+      expect(response.status).toBe(503);
+      const data = await response.json();
+      expect(data.error).toContain('Upstream API error: 503');
+
+      // Clear the mock implementation for subsequent tests
+      mockCachedFetch.mockReset();
+    });
+
+    it('should handle network errors from data-centers endpoint', async () => {
+      // Mock cachedFetch to throw a generic Error
+      mockCachedFetch.mockImplementationOnce(() => {
+        throw new Error('Connection refused');
+      });
+
+      const request = createRequest('/api/v2/data-centers');
+      const response = await app.fetch(request, mockEnv, mockCtx);
+
+      expect(response.status).toBe(502);
+      const data = await response.json();
+      expect(data.error).toBe('Failed to fetch data centers');
+
+      // Clear the mock implementation for subsequent tests
+      mockCachedFetch.mockReset();
+    });
   });
 
   describe('GET /api/v2/worlds', () => {
-    // Note: Error tests are covered in cached-fetch.test.ts
-    // These integration tests focus on the happy path due to cache key collision
-
     beforeEach(() => {
       resetAllMocks();
       mockFetch.mockReset();
@@ -355,6 +401,40 @@ describe('Universalis Proxy App', () => {
 
       expect(response.headers.get('X-Cache-Source')).toBeTruthy();
       expect(response.headers.get('Cache-Control')).toContain('max-age=');
+    });
+
+    it('should handle upstream errors from worlds endpoint', async () => {
+      // Mock cachedFetch to throw an UpstreamError
+      mockCachedFetch.mockImplementationOnce(() => {
+        throw new UpstreamError(502, 'Bad Gateway');
+      });
+
+      const request = createRequest('/api/v2/worlds');
+      const response = await app.fetch(request, mockEnv, mockCtx);
+
+      expect(response.status).toBe(502);
+      const data = await response.json();
+      expect(data.error).toContain('Upstream API error: 502');
+
+      // Clear the mock implementation for subsequent tests
+      mockCachedFetch.mockReset();
+    });
+
+    it('should handle network errors from worlds endpoint', async () => {
+      // Mock cachedFetch to throw a generic Error
+      mockCachedFetch.mockImplementationOnce(() => {
+        throw new Error('DNS resolution failed');
+      });
+
+      const request = createRequest('/api/v2/worlds');
+      const response = await app.fetch(request, mockEnv, mockCtx);
+
+      expect(response.status).toBe(502);
+      const data = await response.json();
+      expect(data.error).toBe('Failed to fetch worlds');
+
+      // Clear the mock implementation for subsequent tests
+      mockCachedFetch.mockReset();
     });
   });
 

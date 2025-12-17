@@ -168,6 +168,29 @@ describe('RequestCoalescer', () => {
       resolvePromise!({ data: 'finally' });
       await requestPromise;
     });
+
+    it('should handle safety timeout when request already completed (no-op branch)', async () => {
+      // This test covers the branch where safety timeout fires but the key
+      // has already been removed by normal cleanup
+      const fetchFn = vi.fn().mockResolvedValue({ data: 'quick' });
+
+      // Start and complete a fast request
+      const result = await coalescer.coalesce('fast-key', fetchFn);
+      expect(result).toEqual({ data: 'quick' });
+
+      // Wait for normal cleanup (100ms delay after completion)
+      await vi.advanceTimersByTimeAsync(150);
+
+      // Key should already be cleaned up
+      expect(coalescer.isInFlight('fast-key')).toBe(false);
+
+      // Now advance past the safety timeout - it should be a no-op
+      // The safety timeout was scheduled but the key is already gone
+      await vi.advanceTimersByTimeAsync(31000);
+
+      // Should still not be in flight (no error thrown)
+      expect(coalescer.isInFlight('fast-key')).toBe(false);
+    });
   });
 
   describe('isInFlight', () => {
