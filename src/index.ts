@@ -11,7 +11,6 @@
  */
 
 import { Hono } from 'hono';
-import { cors } from 'hono/cors';
 import type { Env } from './types/cache';
 import { CACHE_CONFIGS } from './config/cache';
 import { cachedFetch, buildCacheHeaders, UpstreamError } from './services/cached-fetch';
@@ -25,6 +24,7 @@ const app = new Hono<{ Bindings: Env }>();
 
 // =============================================================================
 // CORS Middleware - Applied to ALL responses including errors
+// PROXY-CRITICAL-002: Set headers directly for clarity and reliability
 // =============================================================================
 
 app.use('*', async (c, next) => {
@@ -38,14 +38,28 @@ app.use('*', async (c, next) => {
         origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:')
       : allowedOrigins.includes(origin);
 
-  // Apply CORS middleware with dynamic origin
-  return cors({
-    origin: isAllowed ? origin : allowedOrigins[0],
-    allowMethods: ['GET', 'OPTIONS'],
-    allowHeaders: ['Content-Type', 'Accept'],
-    maxAge: 86400, // Cache preflight for 24 hours
-    credentials: false,
-  })(c, next);
+  // Determine the origin to use in CORS headers
+  const corsOrigin = isAllowed ? origin : allowedOrigins[0];
+
+  // Handle preflight OPTIONS requests
+  if (c.req.method === 'OPTIONS') {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        'Access-Control-Allow-Origin': corsOrigin,
+        'Access-Control-Allow-Methods': 'GET, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Accept',
+        'Access-Control-Max-Age': '86400', // Cache preflight for 24 hours
+      },
+    });
+  }
+
+  // Continue to next middleware/handler
+  await next();
+
+  // Set CORS headers on all responses
+  c.header('Access-Control-Allow-Origin', corsOrigin);
+  c.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
 });
 
 // =============================================================================
@@ -103,6 +117,27 @@ app.get('/api/v2/aggregated/:datacenter/:itemIds', async (c) => {
   // Validate itemIds (comma-separated numbers only)
   if (!/^[\d,]+$/.test(itemIds)) {
     return c.json({ error: 'Invalid itemIds parameter' }, 400);
+  }
+
+  // PROXY-CRITICAL-003: Validate item ID count and range to prevent DoS
+  const ids = itemIds.split(',').map(Number);
+
+  // Reject empty or excessive item counts (Universalis recommends max 100)
+  if (ids.length === 0 || ids.length > 100) {
+    return c.json({
+      error: 'Item count must be between 1 and 100',
+      provided: ids.length,
+    }, 400);
+  }
+
+  // Validate each item ID is a valid positive integer within reasonable range
+  // FFXIV item IDs are typically under 100,000 but we allow up to 1,000,000 for future-proofing
+  const invalidIds = ids.filter(id => !Number.isInteger(id) || id < 1 || id > 1000000);
+  if (invalidIds.length > 0) {
+    return c.json({
+      error: 'Invalid item IDs detected',
+      invalidIds: invalidIds.slice(0, 10), // Only show first 10 to avoid large responses
+    }, 400);
   }
 
   // Normalize cache key for better cache hit rates

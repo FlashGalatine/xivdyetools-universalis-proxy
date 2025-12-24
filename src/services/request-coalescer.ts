@@ -10,15 +10,55 @@
  */
 
 /**
+ * PROXY-CRITICAL-001: Use timestamp-based entries for proper cleanup
+ * This prevents memory leaks if promises hang or take too long
+ */
+interface InFlightEntry {
+  promise: Promise<unknown>;
+  createdAt: number;
+}
+
+/**
  * In-flight request tracking map
  * This lives at module scope and persists for the lifetime of the isolate
  */
-const inFlightRequests = new Map<string, Promise<unknown>>();
+const inFlightRequests = new Map<string, InFlightEntry>();
 
 /**
  * Maximum time to keep a request in the in-flight map (safety timeout)
  */
-const MAX_IN_FLIGHT_TIME_MS = 30000; // 30 seconds
+const MAX_IN_FLIGHT_TIME_MS = 60000; // 60 seconds
+
+/**
+ * How often to run cleanup sweep
+ */
+const CLEANUP_INTERVAL_MS = 10000; // 10 seconds
+
+/**
+ * Last cleanup timestamp to avoid excessive sweeps
+ */
+let lastCleanupTime = 0;
+
+/**
+ * Cleanup stale entries from the in-flight map
+ * This is called periodically to ensure memory doesn't grow unboundedly
+ */
+function cleanupStaleEntries(): void {
+  const now = Date.now();
+
+  // Don't cleanup too frequently
+  if (now - lastCleanupTime < CLEANUP_INTERVAL_MS) {
+    return;
+  }
+  lastCleanupTime = now;
+
+  // Remove entries older than MAX_IN_FLIGHT_TIME_MS
+  for (const [key, entry] of inFlightRequests) {
+    if (now - entry.createdAt > MAX_IN_FLIGHT_TIME_MS) {
+      inFlightRequests.delete(key);
+    }
+  }
+}
 
 /**
  * RequestCoalescer handles request deduplication within an isolate
@@ -42,11 +82,14 @@ export class RequestCoalescer {
    * @returns The fetch result (may be shared with other concurrent requests)
    */
   async coalesce<T>(key: string, fetchFn: () => Promise<T>): Promise<T> {
+    // Run periodic cleanup to prevent memory leaks
+    cleanupStaleEntries();
+
     // Check for existing in-flight request
     const existing = inFlightRequests.get(key);
     if (existing) {
       try {
-        return (await existing) as T;
+        return (await existing.promise) as T;
       } catch (error) {
         // If the original request failed, remove it and try again
         inFlightRequests.delete(key);
@@ -54,9 +97,12 @@ export class RequestCoalescer {
       }
     }
 
-    // Create new request promise
+    // Create new request promise with timestamp
     const promise = fetchFn();
-    inFlightRequests.set(key, promise);
+    inFlightRequests.set(key, {
+      promise,
+      createdAt: Date.now(),
+    });
 
     // Schedule cleanup after the request completes
     this.ctx.waitUntil(
@@ -70,18 +116,6 @@ export class RequestCoalescer {
         .catch(() => {
           // Prevent unhandled rejection - errors are handled by the caller
         })
-    );
-
-    // Safety cleanup timeout in case promise never resolves
-    this.ctx.waitUntil(
-      new Promise<void>((resolve) => {
-        setTimeout(() => {
-          if (inFlightRequests.has(key)) {
-            inFlightRequests.delete(key);
-          }
-          resolve();
-        }, MAX_IN_FLIGHT_TIME_MS);
-      })
     );
 
     return promise;
