@@ -158,10 +158,16 @@ describe('RequestCoalescer', () => {
 
       expect(coalescer.isInFlight('long-running')).toBe(true);
 
-      // Advance time past safety timeout (30 seconds)
-      await vi.advanceTimersByTimeAsync(31000);
+      // Advance time past safety timeout (60 seconds) AND cleanup interval (10 seconds)
+      // The cleanup only runs when cleanupStaleEntries() is called during a new coalesce()
+      await vi.advanceTimersByTimeAsync(61000);
 
-      // Safety cleanup should have removed it
+      // Trigger cleanup by starting a new request (cleanup runs at start of coalesce)
+      const triggerCleanup = vi.fn().mockResolvedValue({ data: 'trigger' });
+      await coalescer.coalesce('trigger-cleanup', triggerCleanup);
+      await vi.advanceTimersByTimeAsync(150); // Wait for cleanup of trigger request
+
+      // Safety cleanup should have removed the long-running entry
       expect(coalescer.isInFlight('long-running')).toBe(false);
 
       // Resolve the promise to complete the request
