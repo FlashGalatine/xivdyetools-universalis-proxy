@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.1] - 2025-12-24
+
+### Fixed
+
+- **Test Suite**: Fixed safety timeout test to match implementation behavior
+  - Updated test to use correct 60-second timeout (was incorrectly testing 30s)
+  - Fixed cleanup trigger mechanism - cleanup runs at start of new coalesce() call
+  - Ensures proper test coverage for stale entry cleanup
+
+---
+
 ## [1.2.0] - 2025-12-24
 
 ### Fixed
