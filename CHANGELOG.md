@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.2] - 2025-12-24
+
+### Security
+
+- **PROXY-HIGH-002**: Added upstream response size limit
+  - Maximum allowed response size: 5MB
+  - Checks `Content-Length` header before processing response body
+  - Throws `ResponseTooLargeError` if limit exceeded
+  - Prevents out-of-memory crashes from unexpectedly large upstream responses
+
+---
+
 ## [1.2.1] - 2025-12-24
 
 ### Fixed

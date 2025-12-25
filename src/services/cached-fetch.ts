@@ -38,6 +38,12 @@ export interface CachedFetchOptions {
 const USER_AGENT = 'XIVDyeTools/1.0 (https://xivdyetools.projectgalatine.com)';
 
 /**
+ * PROXY-HIGH-002: Maximum allowed response size from upstream (5MB)
+ * Prevents OOM from unexpectedly large responses
+ */
+const MAX_RESPONSE_SIZE_BYTES = 5 * 1024 * 1024;
+
+/**
  * Main cached fetch function - orchestrates all cache layers
  *
  * @returns CacheResult with data, source, and staleness info
@@ -112,16 +118,30 @@ export async function cachedFetch<T = unknown>(
 }
 
 /**
- * Fetch from upstream Universalis API
+ * Fetch from upstream Universalis API with size validation
+ * PROXY-HIGH-002: Validates response size before allowing JSON parsing
+ *
+ * @throws ResponseTooLargeError if Content-Length exceeds MAX_RESPONSE_SIZE_BYTES
  */
 async function fetchFromUpstream(url: string): Promise<Response> {
-  return fetch(url, {
+  const response = await fetch(url, {
     method: 'GET',
     headers: {
       Accept: 'application/json',
       'User-Agent': USER_AGENT,
     },
   });
+
+  // PROXY-HIGH-002: Check Content-Length to prevent OOM from huge responses
+  const contentLength = response.headers.get('Content-Length');
+  if (contentLength) {
+    const size = parseInt(contentLength, 10);
+    if (!isNaN(size) && size > MAX_RESPONSE_SIZE_BYTES) {
+      throw new ResponseTooLargeError(size);
+    }
+  }
+
+  return response;
 }
 
 /**
@@ -169,6 +189,21 @@ export class UpstreamError extends Error {
     this.name = 'UpstreamError';
     this.status = status;
     this.statusText = statusText;
+  }
+}
+
+/**
+ * PROXY-HIGH-002: Error for responses exceeding size limit
+ */
+export class ResponseTooLargeError extends Error {
+  sizeBytes: number;
+  maxBytes: number;
+
+  constructor(sizeBytes: number) {
+    super(`Response too large: ${sizeBytes} bytes exceeds limit of ${MAX_RESPONSE_SIZE_BYTES} bytes`);
+    this.name = 'ResponseTooLargeError';
+    this.sizeBytes = sizeBytes;
+    this.maxBytes = MAX_RESPONSE_SIZE_BYTES;
   }
 }
 
