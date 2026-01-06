@@ -62,6 +62,7 @@ app.use('*', async (c, next) => {
   // Set CORS headers on all responses
   c.header('Access-Control-Allow-Origin', corsOrigin);
   c.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  return;
 });
 
 // =============================================================================
