@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-01-05
+
+### Added
+
+- **Datacenter Whitelist**: New `src/config/datacenters.ts` module
+  - Complete whitelist of valid FFXIV datacenters and worlds
+  - `isValidDatacenterOrWorld()` helper function for validation
+  - Prevents cache pollution from invalid datacenter values
+
+- **Rate Limiting**: New `src/services/rate-limiter.ts` module
+  - IP-based sliding window rate limiter
+  - Configurable via `RATE_LIMIT_REQUESTS` and `RATE_LIMIT_WINDOW_SECONDS` env vars
+  - Returns `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset` headers
+  - Periodic cleanup prevents memory growth
+
+### Security
+
+#### Medium Priority Audit Fixes (2026-01-05 Security Audit)
+
+- **MED-001**: Implemented datacenter/world whitelist validation
+  - Replaced permissive alphanumeric regex with explicit whitelist
+  - Prevents cache pollution and reduces attack surface
+
+- **MED-002**: Implemented IP-based rate limiting
+  - Rate limiting now enforced (was previously configured but not used)
+  - Default: 60 requests per 60-second window (configurable via env vars)
+  - Returns 429 Too Many Requests with Retry-After header when exceeded
+
+---
+
 ## [1.2.2] - 2025-12-24
 
 ### Security

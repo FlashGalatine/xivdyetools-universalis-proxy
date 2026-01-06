@@ -13,7 +13,9 @@
 import { Hono } from 'hono';
 import type { Env } from './types/cache';
 import { CACHE_CONFIGS } from './config/cache';
+import { isValidDatacenterOrWorld } from './config/datacenters';
 import { cachedFetch, buildCacheHeaders, UpstreamError } from './services/cached-fetch';
+import { checkRateLimit, getRateLimitHeaders, type RateLimitConfig } from './services/rate-limiter';
 
 /**
  * Retry-After header value when rate limited (seconds)
@@ -101,6 +103,7 @@ function normalizeItemIds(itemIds: string): string {
  * GET /api/v2/aggregated/:datacenter/:itemIds
  *
  * Features:
+ * - IP-based rate limiting
  * - Dual-layer caching (Cache API + KV)
  * - Request coalescing for duplicate requests
  * - Stale-while-revalidate for fast responses
@@ -109,9 +112,33 @@ function normalizeItemIds(itemIds: string): string {
 app.get('/api/v2/aggregated/:datacenter/:itemIds', async (c) => {
   const { datacenter, itemIds } = c.req.param();
 
-  // Validate datacenter (alphanumeric only)
-  if (!/^[a-zA-Z0-9]+$/.test(datacenter)) {
-    return c.json({ error: 'Invalid datacenter parameter' }, 400);
+  // SECURITY: Rate limit by IP address to prevent abuse
+  const clientIP = c.req.header('CF-Connecting-IP') || c.req.header('X-Forwarded-For')?.split(',')[0]?.trim() || 'unknown';
+  const rateLimitConfig: RateLimitConfig = {
+    maxRequests: parseInt(c.env.RATE_LIMIT_REQUESTS, 10) || 60,
+    windowSeconds: parseInt(c.env.RATE_LIMIT_WINDOW_SECONDS, 10) || 60,
+  };
+  const rateLimitResult = checkRateLimit(clientIP, rateLimitConfig);
+
+  if (!rateLimitResult.allowed) {
+    const headers = getRateLimitHeaders(rateLimitResult, rateLimitConfig.maxRequests);
+    return c.json(
+      {
+        error: 'Rate limit exceeded',
+        retryAfter: rateLimitResult.resetInSeconds,
+      },
+      429,
+      {
+        ...headers,
+        'Retry-After': String(rateLimitResult.resetInSeconds),
+      }
+    );
+  }
+
+  // SECURITY: Validate datacenter against whitelist of known FFXIV datacenters/worlds
+  // This prevents cache pollution and reduces attack surface
+  if (!isValidDatacenterOrWorld(datacenter)) {
+    return c.json({ error: 'Invalid datacenter or world name' }, 400);
   }
 
   // Validate itemIds (comma-separated numbers only)
