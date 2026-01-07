@@ -1,6 +1,9 @@
 # XIV Dye Tools - Universalis Proxy
 
-Cloudflare Worker that proxies requests to the Universalis API with proper CORS support.
+**v1.3.0** | Cloudflare Worker that proxies requests to the Universalis API with proper CORS support.
+
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.3%2B-blue)](https://www.typescriptlang.org/)
+[![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-F38020)](https://workers.cloudflare.com/)
 
 ## Problem Solved
 
@@ -53,8 +56,16 @@ Environment variables in `wrangler.toml`:
 |----------|-------------|
 | `ALLOWED_ORIGINS` | Comma-separated list of allowed CORS origins |
 | `UNIVERSALIS_API_BASE` | Base URL for Universalis API |
-| `RATE_LIMIT_REQUESTS` | Max requests per window (future use) |
-| `RATE_LIMIT_WINDOW_SECONDS` | Rate limit window in seconds (future use) |
+| `RATE_LIMIT_REQUESTS` | Max requests per rate limit window (default: 60) |
+| `RATE_LIMIT_WINDOW_SECONDS` | Rate limit window in seconds (default: 60) |
+
+## Features
+
+- **Datacenter Whitelist** - Validates datacenter/world against FFXIV's official list
+- **IP-Based Rate Limiting** - Configurable sliding window rate limiter with `X-RateLimit-*` headers
+- **Dual-Layer Caching** - Cloudflare Cache API (edge) + KV storage (global)
+- **Request Coalescing** - Prevents duplicate upstream requests for simultaneous clients
+- **Stale-While-Revalidate** - Instant responses while refreshing cache in background
 
 ## Integration
 
