@@ -35,7 +35,7 @@ export interface CachedFetchOptions {
 /**
  * User-Agent header for upstream requests
  */
-const USER_AGENT = 'XIVDyeTools/1.0 (https://xivdyetools.projectgalatine.com)';
+const USER_AGENT = 'XIVDyeTools/1.0 (https://xivdyetools.app)';
 
 /**
  * PROXY-HIGH-002: Maximum allowed response size from upstream (5MB)

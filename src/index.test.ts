@@ -49,7 +49,7 @@ describe('Universalis Proxy App', () => {
     return new Request(`https://test.example.com${path}`, {
       ...options,
       headers: {
-        Origin: 'https://xivdyetools.projectgalatine.com',
+        Origin: 'https://xivdyetools.app',
         ...options.headers,
       },
     });
@@ -61,7 +61,7 @@ describe('Universalis Proxy App', () => {
       const response = await app.fetch(request, mockEnv, mockCtx);
 
       expect(response.headers.get('Access-Control-Allow-Origin')).toBe(
-        'https://xivdyetools.projectgalatine.com'
+        'https://xivdyetools.app'
       );
     });
 
@@ -516,7 +516,7 @@ describe('normalizeItemIds helper', () => {
     // Make requests with different orderings
     const request1 = await app.fetch(
       new Request('https://test.example.com/api/v2/aggregated/Crystal/3,1,2', {
-        headers: { Origin: 'https://xivdyetools.projectgalatine.com' },
+        headers: { Origin: 'https://xivdyetools.app' },
       }),
       mockEnv,
       mockCtx

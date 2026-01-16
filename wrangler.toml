@@ -5,7 +5,7 @@ compatibility_flags = ["nodejs_compat"]
 
 # Custom domain routing
 routes = [
-  { pattern = "proxy.xivdyetools.projectgalatine.com", custom_domain = true }
+  { pattern = "proxy.xivdyetools.app", custom_domain = true }
 ]
 
 # Development environment (default)
@@ -25,7 +25,7 @@ name = "xivdyetools-universalis-proxy"
 
 [env.production.vars]
 ENVIRONMENT = "production"
-ALLOWED_ORIGINS = "https://xivdyetools.projectgalatine.com"
+ALLOWED_ORIGINS = "https://xivdyetools.app,https://xivdyetools.projectgalatine.com"
 UNIVERSALIS_API_BASE = "https://universalis.app/api/v2"
 RATE_LIMIT_REQUESTS = "30"
 RATE_LIMIT_WINDOW_SECONDS = "60"

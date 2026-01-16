@@ -250,7 +250,7 @@ export function createMockEnv(
 ) {
   return {
     ENVIRONMENT: 'test',
-    ALLOWED_ORIGINS: 'https://xivdyetools.projectgalatine.com',
+    ALLOWED_ORIGINS: 'https://xivdyetools.app',
     UNIVERSALIS_API_BASE: 'https://universalis.app/api/v2',
     RATE_LIMIT_REQUESTS: '100',
     RATE_LIMIT_WINDOW_SECONDS: '60',
