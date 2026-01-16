@@ -5,7 +5,8 @@ compatibility_flags = ["nodejs_compat"]
 
 # Custom domain routing
 routes = [
-  { pattern = "proxy.xivdyetools.app", custom_domain = true }
+  { pattern = "proxy.xivdyetools.app", custom_domain = true },
+  { pattern = "proxy.xivdyetools.projectgalatine.com", custom_domain = true }  # Transition - remove after v4 migration
 ]
 
 # Development environment (default)
