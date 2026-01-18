@@ -39,15 +39,21 @@ src/
 
 ## Environment Variables
 
-Configured in `wrangler.toml`:
-- `ENVIRONMENT` - "production" or "development"
-- `ALLOWED_ORIGINS` - Comma-separated list of allowed CORS origins
-- `UNIVERSALIS_API_BASE` - Base URL for upstream API
-- `RATE_LIMIT_REQUESTS` - Max requests per window (future use with KV)
-- `RATE_LIMIT_WINDOW_SECONDS` - Rate limit window duration
+### Configuration (wrangler.toml)
 
-Optional KV binding:
-- `PRICE_CACHE` - KV namespace for response caching (5 minute TTL)
+| Variable | Description |
+|----------|-------------|
+| `ENVIRONMENT` | "production" or "development" |
+| `ALLOWED_ORIGINS` | Comma-separated list of allowed CORS origins |
+| `UNIVERSALIS_API_BASE` | Base URL for upstream API |
+| `RATE_LIMIT_REQUESTS` | Max requests per window (future use with KV) |
+| `RATE_LIMIT_WINDOW_SECONDS` | Rate limit window duration |
+
+### Optional Bindings
+
+| Binding | Type | Purpose |
+|---------|------|---------|
+| `PRICE_CACHE` | KV Namespace | Response caching (5 minute TTL) |
 
 ## Testing Locally
 
