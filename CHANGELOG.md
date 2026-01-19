@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.1] - 2026-01-19
+
+### Fixed
+
+- **PROXY-BUG-001**: Fixed race condition in `Response.json()` double-parsing in RequestCoalescer. Applied deferred promise pattern to prevent duplicate in-flight requests consuming response body multiple times
+- **PROXY-BUG-002**: Fixed unhandled promise rejection in RequestCoalescer. Deferred promise pattern now ensures rejections propagate correctly to all waiting callers
+
+---
+
 ## [1.3.0] - 2026-01-05
 
 ### Added
