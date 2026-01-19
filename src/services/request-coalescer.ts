@@ -77,6 +77,10 @@ export class RequestCoalescer {
    * Otherwise, executes the fetch function and shares the result with
    * any concurrent requests for the same key.
    *
+   * PROXY-BUG-001 FIX: Uses deferred promise pattern to prevent race conditions.
+   * The entry is stored in the map SYNCHRONOUSLY before any async work begins,
+   * ensuring concurrent calls will always see the in-flight request.
+   *
    * @param key - Unique identifier for the request (usually the cache key)
    * @param fetchFn - Function that performs the actual fetch
    * @returns The fetch result (may be shared with other concurrent requests)
@@ -85,40 +89,49 @@ export class RequestCoalescer {
     // Run periodic cleanup to prevent memory leaks
     cleanupStaleEntries();
 
-    // Check for existing in-flight request
+    // PROXY-BUG-001 FIX: Check for existing in-flight request FIRST (synchronous)
     const existing = inFlightRequests.get(key);
     if (existing) {
-      try {
-        return (await existing.promise) as T;
-      } catch (error) {
-        // If the original request failed, remove it and try again
-        inFlightRequests.delete(key);
-        throw error;
-      }
+      // Wait for the existing promise - it will either resolve or reject
+      return existing.promise as Promise<T>;
     }
 
-    // Create new request promise with timestamp
-    const promise = fetchFn();
+    // PROXY-BUG-001 FIX: Create a deferred promise and store it SYNCHRONOUSLY
+    // This ensures the entry exists before any async operations
+    let resolvePromise: (value: T) => void;
+    let rejectPromise: (error: unknown) => void;
+
+    const promise = new Promise<T>((resolve, reject) => {
+      resolvePromise = resolve;
+      rejectPromise = reject;
+    });
+
+    // Store entry immediately (synchronous operation)
     inFlightRequests.set(key, {
       promise,
       createdAt: Date.now(),
     });
 
-    // Schedule cleanup after the request completes
-    this.ctx.waitUntil(
-      promise
-        .finally(() => {
-          // Small delay before cleanup to handle very rapid sequential requests
-          setTimeout(() => {
-            inFlightRequests.delete(key);
-          }, 100);
-        })
-        .catch(() => {
-          // Prevent unhandled rejection - errors are handled by the caller
-        })
-    );
+    // Now execute the actual fetch and wire up the deferred promise
+    try {
+      const result = await fetchFn();
 
-    return promise;
+      // Schedule cleanup with a small delay for rapid sequential requests
+      this.ctx.waitUntil(
+        (async () => {
+          await new Promise((resolve) => setTimeout(resolve, 100));
+          inFlightRequests.delete(key);
+        })()
+      );
+
+      resolvePromise!(result);
+      return result;
+    } catch (error) {
+      // Clean up immediately on error so retries can proceed
+      inFlightRequests.delete(key);
+      rejectPromise!(error);
+      throw error;
+    }
   }
 
   /**
