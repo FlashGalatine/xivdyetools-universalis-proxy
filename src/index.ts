@@ -119,7 +119,7 @@ app.get('/api/v2/aggregated/:datacenter/:itemIds', async (c) => {
     maxRequests: parseInt(c.env.RATE_LIMIT_REQUESTS, 10) || 60,
     windowSeconds: parseInt(c.env.RATE_LIMIT_WINDOW_SECONDS, 10) || 60,
   };
-  const rateLimitResult = checkRateLimit(clientIP, rateLimitConfig);
+  const rateLimitResult = await checkRateLimit(clientIP, rateLimitConfig);
 
   if (!rateLimitResult.allowed) {
     const headers = getRateLimitHeaders(rateLimitResult, rateLimitConfig.maxRequests);
