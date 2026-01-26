@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.3] - 2026-01-25
+
+### Performance
+
+- **OPT-003**: Added jitter to cleanup interval to prevent thundering herd
+  - Cleanup timing now varies ±20% around 10-second base interval
+  - Distributes cleanup load across 8-12 second window instead of synchronized spikes
+  - Prevents all Worker isolates from running cleanup simultaneously
+  - Each cleanup randomizes the next interval for continued distribution
+  - **Reference**: Security audit OPT-003 (2026-01-25)
+
+---
+
 ## [1.3.2] - 2026-01-25
 
 ### Security

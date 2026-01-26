@@ -30,9 +30,25 @@ const inFlightRequests = new Map<string, InFlightEntry>();
 const MAX_IN_FLIGHT_TIME_MS = 60000; // 60 seconds
 
 /**
- * How often to run cleanup sweep
+ * Base cleanup interval (target: every ~10 seconds)
+ * OPT-003: Using jitter to prevent thundering herd across isolates
  */
-const CLEANUP_INTERVAL_MS = 10000; // 10 seconds
+const BASE_CLEANUP_INTERVAL_MS = 10000; // 10 seconds
+
+/**
+ * Jitter factor: ±20% variation around base interval
+ * This spreads cleanup across 8-12 second window to prevent synchronized spikes
+ */
+const CLEANUP_JITTER_FACTOR = 0.2;
+
+/**
+ * Generate next cleanup interval with random jitter
+ * Returns value between BASE * (1 - JITTER) and BASE * (1 + JITTER)
+ */
+function getNextCleanupInterval(): number {
+  const jitter = (Math.random() - 0.5) * 2 * CLEANUP_JITTER_FACTOR;
+  return BASE_CLEANUP_INTERVAL_MS * (1 + jitter);
+}
 
 /**
  * Last cleanup timestamp to avoid excessive sweeps
@@ -40,17 +56,24 @@ const CLEANUP_INTERVAL_MS = 10000; // 10 seconds
 let lastCleanupTime = 0;
 
 /**
+ * Next cleanup interval (randomized per OPT-003)
+ */
+let nextCleanupInterval = getNextCleanupInterval();
+
+/**
  * Cleanup stale entries from the in-flight map
  * This is called periodically to ensure memory doesn't grow unboundedly
+ * OPT-003: Uses jittered interval to prevent thundering herd
  */
 function cleanupStaleEntries(): void {
   const now = Date.now();
 
-  // Don't cleanup too frequently
-  if (now - lastCleanupTime < CLEANUP_INTERVAL_MS) {
+  // Don't cleanup too frequently (jittered interval)
+  if (now - lastCleanupTime < nextCleanupInterval) {
     return;
   }
   lastCleanupTime = now;
+  nextCleanupInterval = getNextCleanupInterval(); // Randomize for next cleanup
 
   // Remove entries older than MAX_IN_FLIGHT_TIME_MS
   for (const [key, entry] of inFlightRequests) {
