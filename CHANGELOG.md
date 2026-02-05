@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-02-05
+
+### Changed
+
+- **Removed KV storage layer** — caching now uses Cloudflare Cache API only
+  - The dual-layer architecture (Cache API + KV) introduced in v1.1.0 is replaced by Cache API-only caching
+  - Stale-while-revalidate, request coalescing, and cache debugging headers all work identically
+  - Eliminates all KV write operations from this worker (0 KV writes per request)
+  - Removed `PRICE_CACHE` and `STATIC_CACHE` KV namespace bindings from `wrangler.toml`
+
+### Removed
+
+- `CacheMetadata` type (KV-specific metadata)
+- `kvTtl` from `CacheConfig` (KV TTL configuration)
+- `getFromKv()`, `storeToKv()` methods from `CacheService`
+- KV namespace bindings (`PRICE_CACHE`, `STATIC_CACHE`) from worker environment
+
+---
+
 ## [1.3.5] - 2026-01-26
 
 ### Security

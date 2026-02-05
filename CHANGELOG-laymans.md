@@ -1,28 +1,22 @@
-# What's New in v1.3.5
+# What's New in v1.4.0
 
-*Released: January 26, 2026*
+*Released: February 5, 2026*
 
 ---
 
 ## Overview
 
-This is a maintenance release focused on improving our development security practices. **No user-facing changes** - market board price lookups work exactly the same!
+This release simplifies how the proxy caches market board prices. The old system wrote data to two places (edge cache + KV storage); now it only uses edge cache. **Dye price lookups work exactly the same** — this is purely an internal optimization.
 
 ---
 
 ## What Changed?
 
-### Better Security Scanning
+### Simpler, Leaner Caching
 
-We added automated tools that scan our code before it's published to:
-- Detect if any passwords or API keys were accidentally included in the code
-- Check for known security vulnerabilities in the libraries we use
+Previously, every price lookup wrote to both Cloudflare's Cache API (fast, edge-local) and KV storage (global, but with a daily write limit). Since the edge cache alone handles everything we need — including serving slightly-stale data while refreshing in the background — the KV layer was unnecessary overhead.
 
-### Automated Dependency Updates
-
-We set up Dependabot to automatically suggest updates for the libraries and tools we use. This means:
-- Security patches get applied faster
-- We stay current with bug fixes and improvements
+**Result:** Zero KV writes per request, which helps us stay comfortably within Cloudflare's free-tier limits.
 
 ---
 
