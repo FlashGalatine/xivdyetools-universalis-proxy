@@ -17,7 +17,6 @@ describe('CACHE_CONFIGS', () => {
     it('should have correct CacheConfig structure for all configs', () => {
       const requiredFields: (keyof CacheConfig)[] = [
         'cacheTtl',
-        'kvTtl',
         'swrWindow',
         'keyPrefix',
       ];
@@ -32,7 +31,6 @@ describe('CACHE_CONFIGS', () => {
     it('should have all numeric TTL values', () => {
       Object.entries(CACHE_CONFIGS).forEach(([key, config]) => {
         expect(typeof config.cacheTtl, `${key}.cacheTtl`).toBe('number');
-        expect(typeof config.kvTtl, `${key}.kvTtl`).toBe('number');
         expect(typeof config.swrWindow, `${key}.swrWindow`).toBe('number');
       });
     });
@@ -51,7 +49,6 @@ describe('CACHE_CONFIGS', () => {
     it('should have short TTL for frequently changing price data', () => {
       // 5 minutes = 300 seconds
       expect(config.cacheTtl).toBe(300);
-      expect(config.kvTtl).toBe(300);
     });
 
     it('should have reasonable SWR window', () => {
@@ -74,7 +71,6 @@ describe('CACHE_CONFIGS', () => {
     it('should have long TTL for static data', () => {
       // 24 hours = 86400 seconds
       expect(config.cacheTtl).toBe(86400);
-      expect(config.kvTtl).toBe(86400);
     });
 
     it('should have longer SWR window for static data', () => {
@@ -93,7 +89,6 @@ describe('CACHE_CONFIGS', () => {
     it('should have long TTL for static data', () => {
       // 24 hours = 86400 seconds
       expect(config.cacheTtl).toBe(86400);
-      expect(config.kvTtl).toBe(86400);
     });
 
     it('should have longer SWR window for static data', () => {
@@ -107,16 +102,9 @@ describe('CACHE_CONFIGS', () => {
   });
 
   describe('TTL consistency', () => {
-    it('should have cacheTtl equal to kvTtl for all configs', () => {
-      Object.entries(CACHE_CONFIGS).forEach(([key, config]) => {
-        expect(config.cacheTtl, `${key}: cacheTtl should equal kvTtl`).toBe(config.kvTtl);
-      });
-    });
-
     it('should have positive TTL values', () => {
       Object.entries(CACHE_CONFIGS).forEach(([key, config]) => {
         expect(config.cacheTtl, `${key}.cacheTtl`).toBeGreaterThan(0);
-        expect(config.kvTtl, `${key}.kvTtl`).toBeGreaterThan(0);
         expect(config.swrWindow, `${key}.swrWindow`).toBeGreaterThan(0);
       });
     });
@@ -136,11 +124,9 @@ describe('CACHE_CONFIGS', () => {
     });
 
     it('should satisfy CacheConfig interface', () => {
-      // This is a compile-time check, but we can verify at runtime too
       const validateConfig = (config: CacheConfig): boolean => {
         return (
           typeof config.cacheTtl === 'number' &&
-          typeof config.kvTtl === 'number' &&
           typeof config.swrWindow === 'number' &&
           typeof config.keyPrefix === 'string'
         );

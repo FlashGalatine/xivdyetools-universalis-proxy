@@ -19,7 +19,6 @@ export const CACHE_CONFIGS = {
    */
   aggregated: {
     cacheTtl: 300, // 5 minutes
-    kvTtl: 300, // 5 minutes
     swrWindow: 120, // 2 minutes
     keyPrefix: 'aggregated',
   },
@@ -31,7 +30,6 @@ export const CACHE_CONFIGS = {
    */
   dataCenters: {
     cacheTtl: 86400, // 24 hours
-    kvTtl: 86400, // 24 hours
     swrWindow: 21600, // 6 hours
     keyPrefix: 'data-centers',
   },
@@ -43,7 +41,6 @@ export const CACHE_CONFIGS = {
    */
   worlds: {
     cacheTtl: 86400, // 24 hours
-    kvTtl: 86400, // 24 hours
     swrWindow: 21600, // 6 hours
     keyPrefix: 'worlds',
   },

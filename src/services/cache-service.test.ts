@@ -1,35 +1,30 @@
 /**
- * Tests for CacheService - dual-layer caching with Cache API and KV
+ * Tests for CacheService - Cache API caching
  */
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { CacheService } from './cache-service';
 import {
-  createMockKV,
   createMockExecutionContext,
   resetAllMocks,
-  MockCacheStorage,
 } from '../test-setup';
 import type { CacheConfig } from '../types/cache';
 
 describe('CacheService', () => {
-  let mockKV: ReturnType<typeof createMockKV>;
   let mockCtx: ReturnType<typeof createMockExecutionContext>;
   let cacheService: CacheService;
   const baseUrl = 'https://test.example.com';
 
   const testConfig: CacheConfig = {
     cacheTtl: 300,
-    kvTtl: 300,
     swrWindow: 120,
     keyPrefix: 'test',
   };
 
   beforeEach(() => {
     resetAllMocks();
-    mockKV = createMockKV();
     mockCtx = createMockExecutionContext();
-    cacheService = new CacheService(mockKV, mockCtx, baseUrl);
+    cacheService = new CacheService(mockCtx, baseUrl);
     vi.useFakeTimers();
   });
 
@@ -37,9 +32,9 @@ describe('CacheService', () => {
     vi.useRealTimers();
   });
 
-  describe('getFromCacheApi', () => {
+  describe('get', () => {
     it('should return null when cache is empty', async () => {
-      const result = await cacheService.getFromCacheApi('nonexistent-key');
+      const result = await cacheService.get('nonexistent-key');
       expect(result).toBeNull();
     });
 
@@ -60,7 +55,7 @@ describe('CacheService', () => {
       });
       await cache.put(new Request(cacheUrl), response);
 
-      const result = await cacheService.getFromCacheApi('test-key');
+      const result = await cacheService.get('test-key');
       expect(result).not.toBeNull();
       expect(result?.isStale).toBe(false);
 
@@ -85,7 +80,7 @@ describe('CacheService', () => {
       });
       await cache.put(new Request(cacheUrl), response);
 
-      const result = await cacheService.getFromCacheApi('stale-key');
+      const result = await cacheService.get('stale-key');
       expect(result).not.toBeNull();
       expect(result?.isStale).toBe(true);
     });
@@ -107,7 +102,7 @@ describe('CacheService', () => {
       });
       await cache.put(new Request(cacheUrl), response);
 
-      const result = await cacheService.getFromCacheApi('expired-key');
+      const result = await cacheService.get('expired-key');
       expect(result).toBeNull();
 
       // Check that waitUntil was called for deletion
@@ -115,99 +110,24 @@ describe('CacheService', () => {
     });
 
     it('should handle cache errors gracefully', async () => {
-      // Create a new cache service with caches undefined
       const originalCaches = globalThis.caches;
       // @ts-expect-error - Intentionally setting undefined for testing
       globalThis.caches = undefined;
 
-      const service = new CacheService(mockKV, mockCtx, baseUrl);
-      const result = await service.getFromCacheApi('any-key');
+      const service = new CacheService(mockCtx, baseUrl);
+      const result = await service.get('any-key');
       expect(result).toBeNull();
 
       globalThis.caches = originalCaches;
     });
   });
 
-  describe('getFromKv', () => {
-    it('should return null when KV is empty', async () => {
-      const result = await cacheService.getFromKv('nonexistent-key');
-      expect(result).toBeNull();
-    });
-
-    it('should return null when KV namespace is undefined', async () => {
-      const service = new CacheService(undefined, mockCtx, baseUrl);
-      const result = await service.getFromKv('any-key');
-      expect(result).toBeNull();
-    });
-
-    it('should return cached data when available', async () => {
-      const testData = { items: [1, 2, 3] };
-      const now = Date.now();
-
-      await mockKV.put('test-key', JSON.stringify(testData), {
-        metadata: {
-          cachedAt: now,
-          ttl: 300,
-          swrWindow: 120,
-        },
-      });
-
-      const result = await cacheService.getFromKv('test-key');
-      expect(result).not.toBeNull();
-      expect(result?.data).toEqual(testData);
-      expect(result?.isStale).toBe(false);
-    });
-
-    it('should mark data as stale when beyond TTL but within SWR window', async () => {
-      const testData = { items: [1, 2, 3] };
-      const now = Date.now();
-      const cachedAt = now - 350 * 1000; // 350 seconds ago
-
-      await mockKV.put('stale-key', JSON.stringify(testData), {
-        metadata: {
-          cachedAt,
-          ttl: 300,
-          swrWindow: 120,
-        },
-      });
-
-      const result = await cacheService.getFromKv('stale-key');
-      expect(result).not.toBeNull();
-      expect(result?.isStale).toBe(true);
-    });
-
-    it('should return null and delete when beyond SWR window', async () => {
-      const testData = { items: [1, 2, 3] };
-      const now = Date.now();
-      const cachedAt = now - 500 * 1000; // 500 seconds ago
-
-      await mockKV.put('expired-key', JSON.stringify(testData), {
-        metadata: {
-          cachedAt,
-          ttl: 300,
-          swrWindow: 120,
-        },
-      });
-
-      const result = await cacheService.getFromKv('expired-key');
-      expect(result).toBeNull();
-      expect(mockCtx.waitUntil).toHaveBeenCalled();
-    });
-
-    it('should return null when metadata is missing', async () => {
-      await mockKV.put('no-metadata-key', JSON.stringify({ test: true }));
-
-      const result = await cacheService.getFromKv('no-metadata-key');
-      expect(result).toBeNull();
-    });
-  });
-
-  describe('storeToCacheApi', () => {
+  describe('store', () => {
     it('should store data in Cache API with correct headers', async () => {
       const testData = { items: [1, 2, 3] };
       vi.setSystemTime(new Date('2024-01-01T12:00:00Z'));
 
-      await cacheService.storeToCacheApi('store-test', testData, testConfig);
+      await cacheService.store('store-test', testData, testConfig);
 
       const cache = await caches.open('universalis-proxy');
       const cacheUrl = `${baseUrl}/__cache/store-test`;
@@ -225,41 +145,19 @@ describe('CacheService', () => {
       // @ts-expect-error - Intentionally setting undefined for testing
       globalThis.caches = undefined;
 
-      const service = new CacheService(mockKV, mockCtx, baseUrl);
+      const service = new CacheService(mockCtx, baseUrl);
       // Should not throw
-      await service.storeToCacheApi('key', { data: 'test' }, testConfig);
+      await service.store('key', { data: 'test' }, testConfig);
 
       globalThis.caches = originalCaches;
     });
   });
 
-  describe('storeToKv', () => {
-    it('should store data in KV with metadata', async () => {
-      const testData = { items: [1, 2, 3] };
-      vi.setSystemTime(new Date('2024-01-01T12:00:00Z'));
-
-      await cacheService.storeToKv('kv-test', testData, testConfig);
-
-      const result = await mockKV.getWithMetadata('kv-test', 'json');
-      expect(result.value).toEqual(testData);
-      expect(result.metadata).toMatchObject({
-        ttl: 300,
-        swrWindow: 120,
-      });
-    });
-
-    it('should do nothing when KV is undefined', async () => {
-      const service = new CacheService(undefined, mockCtx, baseUrl);
-      // Should not throw
-      await service.storeToKv('key', { data: 'test' }, testConfig);
-    });
-  });
-
-  describe('storeToAll', () => {
-    it('should store to both cache layers asynchronously', async () => {
+  describe('storeAsync', () => {
+    it('should store to cache asynchronously', async () => {
       const testData = { items: [1, 2, 3] };
 
-      cacheService.storeToAll('all-test', testData, testConfig);
+      cacheService.storeAsync('async-test', testData, testConfig);
 
       // waitUntil should have been called
       expect(mockCtx.waitUntil).toHaveBeenCalled();
@@ -267,44 +165,54 @@ describe('CacheService', () => {
       // Wait for the async operations
       await (mockCtx as unknown as { _waitForAll: () => Promise<void> })._waitForAll();
 
-      // Check KV
-      const kvResult = await mockKV.getWithMetadata('all-test', 'json');
-      expect(kvResult.value).toEqual(testData);
-
       // Check Cache API
       const cache = await caches.open('universalis-proxy');
-      const cacheUrl = `${baseUrl}/__cache/all-test`;
+      const cacheUrl = `${baseUrl}/__cache/async-test`;
       const cached = await cache.match(new Request(cacheUrl));
       expect(cached).toBeDefined();
     });
   });
 
-  describe('deleteFromAll', () => {
-    it('should delete from both cache layers', async () => {
+  describe('deleteEntry', () => {
+    it('should delete from cache', async () => {
       const testData = { items: [1, 2, 3] };
 
       // First, store data
-      await cacheService.storeToCacheApi('delete-test', testData, testConfig);
-      await cacheService.storeToKv('delete-test', testData, testConfig);
+      await cacheService.store('delete-test', testData, testConfig);
 
       // Verify data exists
       const cache = await caches.open('universalis-proxy');
       const cacheUrl = `${baseUrl}/__cache/delete-test`;
       expect(await cache.match(new Request(cacheUrl))).toBeDefined();
-      expect(await mockKV.get('delete-test')).not.toBeNull();
 
       // Delete
-      cacheService.deleteFromAll('delete-test');
-      await (mockCtx as unknown as { _waitForAll: () => Promise<void> })._waitForAll();
+      await cacheService.deleteEntry('delete-test');
 
       // Verify deleted
       expect(await cache.match(new Request(cacheUrl))).toBeUndefined();
-      expect(await mockKV.get('delete-test')).toBeNull();
+    });
+  });
+
+  describe('deleteAsync', () => {
+    it('should delete from cache asynchronously', async () => {
+      const testData = { items: [1, 2, 3] };
+
+      // First, store data
+      await cacheService.store('delete-async-test', testData, testConfig);
+
+      // Delete async
+      cacheService.deleteAsync('delete-async-test');
+      await (mockCtx as unknown as { _waitForAll: () => Promise<void> })._waitForAll();
+
+      // Verify deleted
+      const cache = await caches.open('universalis-proxy');
+      const cacheUrl = `${baseUrl}/__cache/delete-async-test`;
+      expect(await cache.match(new Request(cacheUrl))).toBeUndefined();
     });
 
     it('should handle errors gracefully during deletion', async () => {
       // This should not throw even with no data
-      cacheService.deleteFromAll('nonexistent-key');
+      cacheService.deleteAsync('nonexistent-key');
       await (mockCtx as unknown as { _waitForAll: () => Promise<void> })._waitForAll();
     });
   });
@@ -314,9 +222,9 @@ describe('CacheService', () => {
       const key = 'aggregated:Crystal:123,456,789';
       const testData = { test: true };
 
-      await cacheService.storeToCacheApi(key, testData, testConfig);
+      await cacheService.store(key, testData, testConfig);
 
-      const result = await cacheService.getFromCacheApi(key);
+      const result = await cacheService.get(key);
       expect(result).not.toBeNull();
 
       const data = await result?.response.json();
@@ -327,14 +235,12 @@ describe('CacheService', () => {
   describe('concurrent access', () => {
     it('should handle multiple simultaneous reads', async () => {
       const testData = { items: [1, 2, 3] };
-      await cacheService.storeToCacheApi('concurrent-test', testData, testConfig);
-      await cacheService.storeToKv('concurrent-test', testData, testConfig);
+      await cacheService.store('concurrent-test', testData, testConfig);
 
       const reads = await Promise.all([
-        cacheService.getFromCacheApi('concurrent-test'),
-        cacheService.getFromKv('concurrent-test'),
-        cacheService.getFromCacheApi('concurrent-test'),
-        cacheService.getFromKv('concurrent-test'),
+        cacheService.get('concurrent-test'),
+        cacheService.get('concurrent-test'),
+        cacheService.get('concurrent-test'),
       ]);
 
       reads.forEach((result, i) => {

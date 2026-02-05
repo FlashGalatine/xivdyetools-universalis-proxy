@@ -3,7 +3,7 @@
  *
  * Cloudflare Worker that proxies requests to Universalis API with:
  * - Proper CORS headers on ALL responses (including errors)
- * - Dual-layer caching (Cache API + KV) for optimal performance
+ * - Cache API caching for optimal performance
  * - Request coalescing to prevent duplicate upstream requests
  * - Stale-while-revalidate for fast responses during cache refresh
  *
@@ -105,7 +105,7 @@ function normalizeItemIds(itemIds: string): string {
  *
  * Features:
  * - IP-based rate limiting
- * - Dual-layer caching (Cache API + KV)
+ * - Cache API caching
  * - Request coalescing for duplicate requests
  * - Stale-while-revalidate for fast responses
  * - Normalized cache keys for better hit rates
@@ -181,7 +181,6 @@ app.get('/api/v2/aggregated/:datacenter/:itemIds', async (c) => {
       config,
       upstreamUrl: `${c.env.UNIVERSALIS_API_BASE}/aggregated/${datacenter}/${itemIds}`,
       ctx: c.executionCtx,
-      kv: c.env.PRICE_CACHE,
       baseUrl: new URL(c.req.url).origin,
     });
 
@@ -242,7 +241,6 @@ app.get('/api/v2/data-centers', async (c) => {
       config,
       upstreamUrl: `${c.env.UNIVERSALIS_API_BASE}/data-centers`,
       ctx: c.executionCtx,
-      kv: c.env.STATIC_CACHE,
       baseUrl: new URL(c.req.url).origin,
     });
 
@@ -278,7 +276,6 @@ app.get('/api/v2/worlds', async (c) => {
       config,
       upstreamUrl: `${c.env.UNIVERSALIS_API_BASE}/worlds`,
       ctx: c.executionCtx,
-      kv: c.env.STATIC_CACHE,
       baseUrl: new URL(c.req.url).origin,
     });
 

@@ -1,11 +1,10 @@
 /**
- * Cached Fetch - Main orchestration for the dual-layer caching system
+ * Cached Fetch - Main orchestration for the caching system
  *
  * This module orchestrates the cache lookup flow:
- * 1. Check Cache API (fastest, edge-local)
- * 2. Check KV (global, persistent)
- * 3. Coalesce and fetch from upstream
- * 4. Store results back to both cache layers
+ * 1. Check Cache API (edge-local, fast)
+ * 2. Coalesce and fetch from upstream
+ * 3. Store results back to cache
  *
  * Implements stale-while-revalidate pattern for better performance.
  */
@@ -26,8 +25,6 @@ export interface CachedFetchOptions {
   upstreamUrl: string;
   /** Worker execution context */
   ctx: ExecutionContext;
-  /** KV namespace for caching (optional) */
-  kv?: KVNamespace;
   /** Base URL for Cache API synthetic URLs */
   baseUrl: string;
 }
@@ -44,7 +41,7 @@ const USER_AGENT = 'XIVDyeTools/1.0 (https://xivdyetools.app)';
 const MAX_RESPONSE_SIZE_BYTES = 5 * 1024 * 1024;
 
 /**
- * Main cached fetch function - orchestrates all cache layers
+ * Main cached fetch function - orchestrates cache lookup
  *
  * @returns CacheResult with data, source, and staleness info
  * @throws Error if upstream fetch fails and no cached data available
@@ -52,17 +49,17 @@ const MAX_RESPONSE_SIZE_BYTES = 5 * 1024 * 1024;
 export async function cachedFetch<T = unknown>(
   options: CachedFetchOptions
 ): Promise<CacheResult<T>> {
-  const { cacheKey, config, upstreamUrl, ctx, kv, baseUrl } = options;
+  const { cacheKey, config, upstreamUrl, ctx, baseUrl } = options;
 
-  const cacheService = new CacheService(kv, ctx, baseUrl);
+  const cacheService = new CacheService(ctx, baseUrl);
   const coalescer = new RequestCoalescer(ctx);
 
-  // Layer 1: Check Cache API
-  const cacheApiResult = await cacheService.getFromCacheApi(cacheKey);
-  if (cacheApiResult) {
-    const data = (await cacheApiResult.response.json()) as T;
+  // Check Cache API
+  const cacheResult = await cacheService.get(cacheKey);
+  if (cacheResult) {
+    const data = (await cacheResult.response.json()) as T;
 
-    if (cacheApiResult.isStale) {
+    if (cacheResult.isStale) {
       // Trigger background revalidation, but return stale data immediately
       ctx.waitUntil(
         revalidateInBackground(cacheKey, upstreamUrl, cacheService, config, coalescer)
@@ -72,31 +69,11 @@ export async function cachedFetch<T = unknown>(
     return {
       data,
       source: 'cache-api',
-      isStale: cacheApiResult.isStale,
+      isStale: cacheResult.isStale,
     };
   }
 
-  // Layer 2: Check KV
-  const kvResult = await cacheService.getFromKv<T>(cacheKey);
-  if (kvResult) {
-    // Populate Cache API for faster future hits (async)
-    cacheService.storeToAll(cacheKey, kvResult.data, config);
-
-    if (kvResult.isStale) {
-      // Trigger background revalidation
-      ctx.waitUntil(
-        revalidateInBackground(cacheKey, upstreamUrl, cacheService, config, coalescer)
-      );
-    }
-
-    return {
-      data: kvResult.data,
-      source: 'kv',
-      isStale: kvResult.isStale,
-    };
-  }
-
-  // Layer 3: Fetch from upstream with request coalescing
+  // Fetch from upstream with request coalescing
   const data = await coalescer.coalesce<T>(cacheKey, async () => {
     const response = await fetchFromUpstream(upstreamUrl);
 
@@ -107,8 +84,8 @@ export async function cachedFetch<T = unknown>(
     return response.json() as Promise<T>;
   });
 
-  // Populate all cache layers (async)
-  cacheService.storeToAll(cacheKey, data, config);
+  // Store to cache (async, non-blocking)
+  cacheService.storeAsync(cacheKey, data, config);
 
   return {
     data,
@@ -170,7 +147,7 @@ async function revalidateInBackground(
     });
 
     // Update cache with fresh data
-    cacheService.storeToAll(cacheKey, data, config);
+    cacheService.storeAsync(cacheKey, data, config);
   } catch {
     // Revalidation failed silently - stale data will continue to be served
     // until it expires beyond the SWR window

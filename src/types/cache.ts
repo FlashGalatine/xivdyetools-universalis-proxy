@@ -1,5 +1,5 @@
 /**
- * Cache type definitions for the dual-layer caching system
+ * Cache type definitions for the Cache API caching system
  */
 
 /**
@@ -8,8 +8,6 @@
 export interface CacheConfig {
   /** Time-to-live for Cache API in seconds */
   cacheTtl: number;
-  /** Time-to-live for KV storage in seconds */
-  kvTtl: number;
   /** Stale-while-revalidate window in seconds */
   swrWindow: number;
   /** Cache key prefix for namespacing */
@@ -31,22 +29,10 @@ export interface CacheResult<T = unknown> {
 /**
  * Possible sources for cached data
  */
-export type CacheSource = 'cache-api' | 'kv' | 'upstream';
+export type CacheSource = 'cache-api' | 'upstream';
 
 /**
- * Metadata stored alongside cached data in KV
- */
-export interface CacheMetadata {
-  /** Timestamp when the data was cached */
-  cachedAt: number;
-  /** TTL in seconds */
-  ttl: number;
-  /** SWR window in seconds */
-  swrWindow: number;
-}
-
-/**
- * Extended environment bindings with cache namespaces
+ * Extended environment bindings
  */
 export interface Env {
   ENVIRONMENT: string;
@@ -54,8 +40,4 @@ export interface Env {
   UNIVERSALIS_API_BASE: string;
   RATE_LIMIT_REQUESTS: string;
   RATE_LIMIT_WINDOW_SECONDS: string;
-  /** KV namespace for price data caching */
-  PRICE_CACHE?: KVNamespace;
-  /** KV namespace for static data caching (data-centers, worlds) */
-  STATIC_CACHE?: KVNamespace;
 }

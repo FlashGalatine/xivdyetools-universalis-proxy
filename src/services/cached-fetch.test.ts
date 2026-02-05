@@ -1,10 +1,10 @@
 /**
- * Tests for cached-fetch - main orchestration for dual-layer caching
+ * Tests for cached-fetch - main orchestration for Cache API caching
  */
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { cachedFetch, buildCacheHeaders, UpstreamError } from './cached-fetch';
-import { createMockKV, createMockExecutionContext, resetAllMocks } from '../test-setup';
+import { createMockExecutionContext, resetAllMocks } from '../test-setup';
 import type { CacheConfig, CacheSource } from '../types/cache';
 
 // Mock global fetch
@@ -12,21 +12,18 @@ const mockFetch = vi.fn();
 vi.stubGlobal('fetch', mockFetch);
 
 describe('cachedFetch', () => {
-  let mockKV: ReturnType<typeof createMockKV>;
   let mockCtx: ReturnType<typeof createMockExecutionContext>;
   const baseUrl = 'https://test.example.com';
   const upstreamUrl = 'https://universalis.app/api/v2/aggregated/Crystal/12345';
 
   const testConfig: CacheConfig = {
     cacheTtl: 300,
-    kvTtl: 300,
     swrWindow: 120,
     keyPrefix: 'test',
   };
 
   beforeEach(() => {
     resetAllMocks();
-    mockKV = createMockKV();
     mockCtx = createMockExecutionContext();
     mockFetch.mockReset();
     vi.useFakeTimers();
@@ -51,7 +48,6 @@ describe('cachedFetch', () => {
         config: testConfig,
         upstreamUrl,
         ctx: mockCtx,
-        kv: mockKV,
         baseUrl,
       });
 
@@ -81,13 +77,12 @@ describe('cachedFetch', () => {
           config: testConfig,
           upstreamUrl,
           ctx: mockCtx,
-          kv: mockKV,
           baseUrl,
         })
       ).rejects.toThrow(UpstreamError);
     });
 
-    it('should store fetched data in all cache layers', async () => {
+    it('should store fetched data in cache', async () => {
       const upstreamData = { items: [{ id: 1, price: 100 }] };
       mockFetch.mockResolvedValueOnce(
         new Response(JSON.stringify(upstreamData), {
@@ -100,11 +95,10 @@ describe('cachedFetch', () => {
         config: testConfig,
         upstreamUrl,
         ctx: mockCtx,
-        kv: mockKV,
         baseUrl,
       });
 
-      // waitUntil should be called to store to caches
+      // waitUntil should be called to store to cache
       expect(mockCtx.waitUntil).toHaveBeenCalled();
     });
   });
@@ -132,7 +126,6 @@ describe('cachedFetch', () => {
         config: testConfig,
         upstreamUrl,
         ctx: mockCtx,
-        kv: mockKV,
         baseUrl,
       });
 
@@ -171,7 +164,6 @@ describe('cachedFetch', () => {
         config: testConfig,
         upstreamUrl,
         ctx: mockCtx,
-        kv: mockKV,
         baseUrl,
       });
 
@@ -180,93 +172,6 @@ describe('cachedFetch', () => {
       expect(result.isStale).toBe(true);
       // Background revalidation should be triggered
       expect(mockCtx.waitUntil).toHaveBeenCalled();
-    });
-  });
-
-  describe('cache hit - KV', () => {
-    it('should return fresh data from KV when Cache API misses', async () => {
-      const cachedData = { items: [{ id: 1, price: 100 }] };
-      const now = Date.now();
-
-      // Pre-populate KV only
-      await mockKV.put('kv-hit-test', JSON.stringify(cachedData), {
-        metadata: {
-          cachedAt: now,
-          ttl: 300,
-          swrWindow: 120,
-        },
-      });
-
-      const result = await cachedFetch({
-        cacheKey: 'kv-hit-test',
-        config: testConfig,
-        upstreamUrl,
-        ctx: mockCtx,
-        kv: mockKV,
-        baseUrl,
-      });
-
-      expect(result.data).toEqual(cachedData);
-      expect(result.source).toBe('kv');
-      expect(result.isStale).toBe(false);
-      expect(mockFetch).not.toHaveBeenCalled();
-
-      // Should populate Cache API for future hits
-      expect(mockCtx.waitUntil).toHaveBeenCalled();
-    });
-
-    it('should return stale KV data and trigger background revalidation', async () => {
-      const cachedData = { items: [{ id: 1, price: 100 }] };
-      const now = Date.now();
-      const cachedAt = now - 350 * 1000; // Beyond TTL but within SWR
-
-      await mockKV.put('kv-stale-test', JSON.stringify(cachedData), {
-        metadata: {
-          cachedAt,
-          ttl: 300,
-          swrWindow: 120,
-        },
-      });
-
-      mockFetch.mockResolvedValueOnce(
-        new Response(JSON.stringify({ items: [{ id: 1, price: 150 }] }), {
-          status: 200,
-        })
-      );
-
-      const result = await cachedFetch({
-        cacheKey: 'kv-stale-test',
-        config: testConfig,
-        upstreamUrl,
-        ctx: mockCtx,
-        kv: mockKV,
-        baseUrl,
-      });
-
-      expect(result.data).toEqual(cachedData);
-      expect(result.source).toBe('kv');
-      expect(result.isStale).toBe(true);
-    });
-  });
-
-  describe('without KV namespace', () => {
-    it('should work with undefined KV', async () => {
-      const upstreamData = { items: [{ id: 1, price: 100 }] };
-      mockFetch.mockResolvedValueOnce(
-        new Response(JSON.stringify(upstreamData), { status: 200 })
-      );
-
-      const result = await cachedFetch({
-        cacheKey: 'no-kv-test',
-        config: testConfig,
-        upstreamUrl,
-        ctx: mockCtx,
-        kv: undefined,
-        baseUrl,
-      });
-
-      expect(result.data).toEqual(upstreamData);
-      expect(result.source).toBe('upstream');
     });
   });
 });
@@ -302,7 +207,6 @@ describe('UpstreamError', () => {
 describe('buildCacheHeaders', () => {
   const testConfig: CacheConfig = {
     cacheTtl: 300,
-    kvTtl: 300,
     swrWindow: 120,
     keyPrefix: 'test',
   };
@@ -324,13 +228,6 @@ describe('buildCacheHeaders', () => {
     expect(headers['X-Cache-Stale']).toBe('false');
   });
 
-  it('should return HIT for kv source', () => {
-    const headers = buildCacheHeaders('kv', false, testConfig);
-
-    expect(headers['X-Cache']).toBe('HIT');
-    expect(headers['X-Cache-Source']).toBe('kv');
-  });
-
   it('should mark stale data correctly', () => {
     const headers = buildCacheHeaders('cache-api', true, testConfig);
 
@@ -349,7 +246,7 @@ describe('buildCacheHeaders', () => {
   });
 
   it('should handle all cache sources', () => {
-    const sources: CacheSource[] = ['cache-api', 'kv', 'upstream'];
+    const sources: CacheSource[] = ['cache-api', 'upstream'];
 
     sources.forEach((source) => {
       const headers = buildCacheHeaders(source, false, testConfig);
