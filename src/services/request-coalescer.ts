@@ -129,6 +129,11 @@ export class RequestCoalescer {
       rejectPromise = reject;
     });
 
+    // Suppress unhandled rejection on the deferred promise — the error is
+    // re-thrown from coalesce() so callers already receive it, but the
+    // deferred promise itself has no listener when there are no concurrent waiters.
+    promise.catch(() => {});
+
     // Store entry immediately (synchronous operation)
     inFlightRequests.set(key, {
       promise,

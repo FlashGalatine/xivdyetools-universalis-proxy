@@ -110,7 +110,7 @@ describe('CacheService', () => {
     });
 
     it('should handle cache errors gracefully', async () => {
-      const originalCaches = globalThis.caches;
+      const originalCaches = (globalThis as unknown as { caches: CacheStorage }).caches;
       // @ts-expect-error - Intentionally setting undefined for testing
       globalThis.caches = undefined;
 
@@ -118,7 +118,7 @@ describe('CacheService', () => {
       const result = await service.get('any-key');
       expect(result).toBeNull();
 
-      globalThis.caches = originalCaches;
+      (globalThis as unknown as { caches: CacheStorage }).caches = originalCaches;
     });
   });
 
@@ -141,7 +141,7 @@ describe('CacheService', () => {
     });
 
     it('should do nothing when caches is undefined', async () => {
-      const originalCaches = globalThis.caches;
+      const originalCaches = (globalThis as unknown as { caches: CacheStorage }).caches;
       // @ts-expect-error - Intentionally setting undefined for testing
       globalThis.caches = undefined;
 
@@ -149,7 +149,7 @@ describe('CacheService', () => {
       // Should not throw
       await service.store('key', { data: 'test' }, testConfig);
 
-      globalThis.caches = originalCaches;
+      (globalThis as unknown as { caches: CacheStorage }).caches = originalCaches;
     });
   });
 

@@ -6,13 +6,6 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { RequestCoalescer } from './request-coalescer';
 import { createMockExecutionContext, resetAllMocks } from '../test-setup';
 
-// Access the module-scoped inFlightRequests map for testing
-// We need to reset it between tests
-const getInFlightRequestsMap = async () => {
-  // Import the module to access internal state indirectly through the class
-  return new Map();
-};
-
 // We need to clear the module-level inFlightRequests map between tests
 // Since it's not exported, we'll advance timers to clear it
 describe('RequestCoalescer', () => {
@@ -308,10 +301,6 @@ describe('RequestCoalescer', () => {
     });
 
     it('should handle mixed coalesced and separate requests', async () => {
-      const fetchFn = vi.fn().mockImplementation(async (key: string) => {
-        return { key };
-      });
-
       // These should coalesce (same key, concurrent)
       let resolveA: (value: unknown) => void;
       const promiseA = new Promise((resolve) => {

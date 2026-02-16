@@ -57,6 +57,7 @@ export class MockCache implements Cache {
  */
 export class MockCacheStorage implements CacheStorage {
   private caches = new Map<string, MockCache>();
+  readonly default: Cache = new MockCache();
 
   async open(cacheName: string): Promise<MockCache> {
     let cache = this.caches.get(cacheName);

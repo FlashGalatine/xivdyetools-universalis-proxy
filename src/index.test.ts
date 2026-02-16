@@ -4,7 +4,7 @@
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import app from './index';
-import { createMockKV, createMockExecutionContext, createMockEnv, resetAllMocks } from './test-setup';
+import { createMockExecutionContext, createMockEnv, resetAllMocks } from './test-setup';
 import { UpstreamError } from './services/cached-fetch';
 
 // Mock global fetch for upstream API calls
@@ -136,7 +136,7 @@ describe('Universalis Proxy App', () => {
         const response = await app.fetch(request, mockEnv, mockCtx);
 
         expect(response.status).toBe(200);
-        const data = await response.json();
+        const data = await response.json<Record<string, unknown>>();
         expect(data).toMatchObject({
           name: 'xivdyetools-universalis-proxy',
           status: 'ok',
@@ -151,7 +151,7 @@ describe('Universalis Proxy App', () => {
         const response = await app.fetch(request, mockEnv, mockCtx);
 
         expect(response.status).toBe(200);
-        const data = await response.json();
+        const data = await response.json<Record<string, unknown>>();
         expect(data).toEqual({ status: 'ok' });
       });
     });
@@ -178,16 +178,27 @@ describe('Universalis Proxy App', () => {
       const response = await app.fetch(request, mockEnv, mockCtx);
 
       expect(response.status).toBe(200);
-      const data = await response.json();
+      const data = await response.json<Record<string, unknown>>();
       expect(data).toEqual(upstreamData);
     });
 
-    it('should reject invalid datacenter parameter', async () => {
+    it('should reject invalid datacenter parameter with special chars (route mismatch)', async () => {
+      // Hono's router does not match special characters in path segments,
+      // so Crystal!@# falls through to the 404 handler
       const request = createRequest('/api/v2/aggregated/Crystal!@#/12345');
       const response = await app.fetch(request, mockEnv, mockCtx);
 
+      expect(response.status).toBe(404);
+    });
+
+    it('should reject invalid datacenter parameter', async () => {
+      // A plausible but non-existent datacenter name reaches the route handler
+      // and gets rejected by isValidDatacenterOrWorld()
+      const request = createRequest('/api/v2/aggregated/FakeCenter/12345');
+      const response = await app.fetch(request, mockEnv, mockCtx);
+
       expect(response.status).toBe(400);
-      const data = await response.json();
+      const data = await response.json<Record<string, unknown>>();
       expect(data.error).toContain('Invalid datacenter');
     });
 
@@ -196,7 +207,7 @@ describe('Universalis Proxy App', () => {
       const response = await app.fetch(request, mockEnv, mockCtx);
 
       expect(response.status).toBe(400);
-      const data = await response.json();
+      const data = await response.json<Record<string, unknown>>();
       expect(data.error).toContain('Invalid itemIds');
     });
 
@@ -245,7 +256,7 @@ describe('Universalis Proxy App', () => {
       const response = await app.fetch(request, mockEnv, mockCtx);
 
       expect(response.status).toBe(429);
-      const data = await response.json();
+      const data = await response.json<Record<string, unknown>>();
       expect(data.error).toContain('Rate limited');
       expect(response.headers.get('Retry-After')).toBe('60');
     });
@@ -260,7 +271,7 @@ describe('Universalis Proxy App', () => {
       const response = await app.fetch(request, mockEnv, mockCtx);
 
       expect(response.status).toBe(404);
-      const data = await response.json();
+      const data = await response.json<Record<string, unknown>>();
       expect(data.error).toContain('Upstream API error');
     });
 
@@ -272,7 +283,7 @@ describe('Universalis Proxy App', () => {
       const response = await app.fetch(request, mockEnv, mockCtx);
 
       expect(response.status).toBe(502);
-      const data = await response.json();
+      const data = await response.json<Record<string, unknown>>();
       expect(data.error).toContain('Failed to fetch');
     });
 
@@ -311,7 +322,7 @@ describe('Universalis Proxy App', () => {
       const response = await app.fetch(request, freshEnv, freshCtx);
 
       expect(response.status).toBe(200);
-      const data = await response.json();
+      const data = await response.json<Record<string, unknown>>();
       expect(data).toEqual(upstreamData);
     });
 
@@ -340,7 +351,7 @@ describe('Universalis Proxy App', () => {
       const response = await app.fetch(request, mockEnv, mockCtx);
 
       expect(response.status).toBe(503);
-      const data = await response.json();
+      const data = await response.json<Record<string, unknown>>();
       expect(data.error).toContain('Upstream API error: 503');
 
       // Clear the mock implementation for subsequent tests
@@ -357,7 +368,7 @@ describe('Universalis Proxy App', () => {
       const response = await app.fetch(request, mockEnv, mockCtx);
 
       expect(response.status).toBe(502);
-      const data = await response.json();
+      const data = await response.json<Record<string, unknown>>();
       expect(data.error).toBe('Failed to fetch data centers');
 
       // Clear the mock implementation for subsequent tests
@@ -384,7 +395,7 @@ describe('Universalis Proxy App', () => {
       const response = await app.fetch(request, freshEnv, freshCtx);
 
       expect(response.status).toBe(200);
-      const data = await response.json();
+      const data = await response.json<Record<string, unknown>>();
       expect(data).toEqual(upstreamData);
     });
 
@@ -413,7 +424,7 @@ describe('Universalis Proxy App', () => {
       const response = await app.fetch(request, mockEnv, mockCtx);
 
       expect(response.status).toBe(502);
-      const data = await response.json();
+      const data = await response.json<Record<string, unknown>>();
       expect(data.error).toContain('Upstream API error: 502');
 
       // Clear the mock implementation for subsequent tests
@@ -430,7 +441,7 @@ describe('Universalis Proxy App', () => {
       const response = await app.fetch(request, mockEnv, mockCtx);
 
       expect(response.status).toBe(502);
-      const data = await response.json();
+      const data = await response.json<Record<string, unknown>>();
       expect(data.error).toBe('Failed to fetch worlds');
 
       // Clear the mock implementation for subsequent tests
@@ -444,7 +455,7 @@ describe('Universalis Proxy App', () => {
       const response = await app.fetch(request, mockEnv, mockCtx);
 
       expect(response.status).toBe(404);
-      const data = await response.json();
+      const data = await response.json<Record<string, unknown>>();
       expect(data.error).toBe('Not Found');
       expect(data.availableEndpoints).toContain('/api/v2/data-centers');
       expect(data.availableEndpoints).toContain('/api/v2/worlds');
@@ -455,9 +466,9 @@ describe('Universalis Proxy App', () => {
       const response = await app.fetch(request, mockEnv, mockCtx);
 
       expect(response.status).toBe(404);
-      const data = await response.json();
+      const data = await response.json<Record<string, unknown>>();
       expect(data.availableEndpoints).toBeInstanceOf(Array);
-      expect(data.availableEndpoints.length).toBeGreaterThan(0);
+      expect((data.availableEndpoints as unknown[]).length).toBeGreaterThan(0);
     });
   });
 
@@ -476,7 +487,7 @@ describe('Universalis Proxy App', () => {
       const response = await app.fetch(request, badEnv, mockCtx);
 
       expect(response.status).toBe(500);
-      const data = await response.json();
+      const data = await response.json<Record<string, unknown>>();
       expect(data.error).toBe('Internal Server Error');
     });
 
@@ -493,7 +504,7 @@ describe('Universalis Proxy App', () => {
       const response = await app.fetch(request, badEnv, mockCtx);
 
       expect(response.status).toBe(500);
-      const data = await response.json();
+      const data = await response.json<Record<string, unknown>>();
       // In development, error message should be more detailed
       expect(data.message).toBeTruthy();
     });
