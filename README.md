@@ -1,3 +1,5 @@
+# NOTICE! This repo has been DEPRECATED! For the latest updates to the XIV Dye Tools app, see the mono-repo here: https://github.com/FlashGalatine/xivdyetools
+
 # XIV Dye Tools - Universalis Proxy
 
 **v1.3.0** | Cloudflare Worker that proxies requests to the Universalis API with proper CORS support.
